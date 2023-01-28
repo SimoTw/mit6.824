@@ -28,7 +28,6 @@ func ihash(key string) int {
 	return int(h.Sum32() & 0x7fffffff)
 }
 
-
 //
 // main/mrworker.go calls this function.
 //
@@ -53,20 +52,30 @@ func Worker(mapf func(string, string) []KeyValue,
 				}
 				file.Close()
 				kva := mapf(filename, string(content))
-				for _, kv := range(kva) {
-					fmt.Printf("Key: %v, Value: %v\n", kv.Key, kv.Value)
-					oname := fmt.Sprintf("mr-%v-%v", assignReply.WorkerId,ihash(kv.Key) % assignReply.NReduce) // mr-X-Y
+				files := []*os.File{}
+				for i := 0; i < assignReply.NReduce; i++ {
+					oname := fmt.Sprintf("mr-%v-%v", assignReply.WorkerId, i) // mr-X-Y
 					f, err := os.OpenFile(oname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 					if err != nil {
 						log.Fatal(err)
 					}
-					if _, err := f.Write([]byte(fmt.Sprintf("%v:%v\n", kv.Key, kv.Value))); err != nil {
+					files = append(files, f)
+				}
+				for _, kv := range(kva) {
+					fmt.Printf("Key: %v, Value: %v\n", kv.Key, kv.Value)
+					i := ihash(kv.Key) % assignReply.NReduce
+					f := files[i]
+					_, err = f.Write([]byte(fmt.Sprintf("%v:%v\n", kv.Key, kv.Value)))
+					if err != nil {
 						f.Close() // ignore error; Write error takes precedence
 						log.Fatal(err)
 					}
-					if err := f.Close(); err != nil {
+				}
+				for _, f := range(files) {
+					err = f.Close()
+					if err != nil {
 						log.Fatal(err)
-					}				
+					}	
 				}
 				completeArgs := CompleteArgs{Filename: assignReply.Filename}
 				completeReply := CompleteReply{}
