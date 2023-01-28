@@ -3,7 +3,7 @@ package mr
 import (
 	"fmt"
 	"hash/fnv"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/rpc"
 	"os"
@@ -43,19 +43,20 @@ func Worker(mapf func(string, string) []KeyValue,
 			filename := assignReply.Filename
 			switch assignReply.TaskType {
 			case MAP_TASK:
-				file, err := os.Open(filename)
+				file, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0755)
 				if err != nil {
 					log.Fatalf("can not read file %v", filename)
 				}
-				content, err := ioutil.ReadAll(file)
+				content, err := io.ReadAll(file)
 				if err != nil {
 					log.Fatalf("can not read file %v", filename)
 				}
 				file.Close()
 				kva := mapf(filename, string(content))
 				for _, kv := range(kva) {
+					fmt.Printf("Key: %v, Value: %v\n", kv.Key, kv.Value)
 					oname := fmt.Sprintf("mr-%v-%v", assignReply.WorkerId,ihash(kv.Key) % assignReply.NReduce) // mr-X-Y
-					err := ioutil.WriteFile(oname, []byte(fmt.Sprintf("%v:%v\n", kv.Key, kv.Value)), 0666)
+					err := os.WriteFile(oname, []byte(fmt.Sprintf("%v:%v\n", kv.Key, kv.Value)), 0666)
 					if err != nil {
 						log.Fatal(err)
 					}
