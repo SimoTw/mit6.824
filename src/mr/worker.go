@@ -43,7 +43,7 @@ func Worker(mapf func(string, string) []KeyValue,
 			filename := assignReply.Filename
 			switch assignReply.TaskType {
 			case MAP_TASK:
-				file, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0755)
+				file, err := os.Open(filename)
 				if err != nil {
 					log.Fatalf("can not read file %v", filename)
 				}
@@ -56,10 +56,17 @@ func Worker(mapf func(string, string) []KeyValue,
 				for _, kv := range(kva) {
 					fmt.Printf("Key: %v, Value: %v\n", kv.Key, kv.Value)
 					oname := fmt.Sprintf("mr-%v-%v", assignReply.WorkerId,ihash(kv.Key) % assignReply.NReduce) // mr-X-Y
-					err := os.WriteFile(oname, []byte(fmt.Sprintf("%v:%v\n", kv.Key, kv.Value)), 0666)
+					f, err := os.OpenFile(oname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 					if err != nil {
 						log.Fatal(err)
 					}
+					if _, err := f.Write([]byte(fmt.Sprintf("%v:%v\n", kv.Key, kv.Value))); err != nil {
+						f.Close() // ignore error; Write error takes precedence
+						log.Fatal(err)
+					}
+					if err := f.Close(); err != nil {
+						log.Fatal(err)
+					}				
 				}
 				completeArgs := CompleteArgs{Filename: assignReply.Filename}
 				completeReply := CompleteReply{}
