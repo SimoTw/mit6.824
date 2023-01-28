@@ -29,6 +29,12 @@ type AssignArgs struct {
 	WorkerId int
 }
 
+type CompleteArgs struct {
+	Filename string
+}
+
+type CompleteReply struct {}
+
 type AssignReply struct {
 	Filename string
 	TaskType TASK_TYPE

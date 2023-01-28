@@ -78,6 +78,16 @@ func (c *Coordinator) Assign(args *AssignArgs, reply *AssignReply) error {
 	return nil
 }
 
+func (c *Coordinator) Complete(args *CompleteArgs, reply *CompleteReply) error {
+	for _, task := range(c.Tasks) {
+		if task.Filename == args.Filename {
+			task.State = COMPLETED
+			break
+		}
+	}
+	return nil
+}
+
 func (c *Coordinator) MakeTasks(files []string) error {
 	// caveat: task by filename without measure file size now.
 	for _, filename := range files {

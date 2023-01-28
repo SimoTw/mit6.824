@@ -61,6 +61,13 @@ func Worker(mapf func(string, string) []KeyValue,
 						log.Fatal(err)
 					}
 				}
+				completeArgs := CompleteArgs{Filename: assignReply.Filename}
+				completeReply := CompleteReply{}
+				ok = false
+				for !ok {
+					ok = call("Coordinator.Complete", &completeArgs, &completeReply)
+					time.Sleep(time.Second)
+				}
 				break
 			case REDUCE_TASK:
 				break
