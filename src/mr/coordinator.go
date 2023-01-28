@@ -1,15 +1,43 @@
 package mr
 
-import "log"
-import "net"
-import "os"
-import "net/rpc"
-import "net/http"
+import (
+	"log"
+	"net"
+	"net/http"
+	"net/rpc"
+	"os"
+)
+
+type STATE int
+
+const (
+	IDLE STATE = 0
+	IN_PROGRESS STATE = 1
+	COMPLETED STATE = 2
+)
+
+type TASK_TYPE int
+
+const (
+	MAP_TASK TASK_TYPE = 0
+	REDUCE_TASK TASK_TYPE = 1
+)
+
+const TIMER_LIMIT = 10
+
+type Task struct {
+	Filename string
+	State STATE
+	// timer int
+}
+
 
 
 type Coordinator struct {
 	// Your definitions here.
-
+	Tasks []*Task
+	NReduce int
+	TaskType TASK_TYPE
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -24,6 +52,27 @@ func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
 	return nil
 }
 
+
+func (c *Coordinator) Assign(args *AssignArgs, reply *AssignReply) error {
+	// how to keep the worker ids?
+	for _, task := range c.Tasks {
+		if (task.State == IDLE) {
+			reply.Filename = task.Filename
+			reply.TaskType = c.TaskType
+			break
+		}
+	}
+	return nil
+}
+
+func (c *Coordinator) MakeTasks(files []string) error {
+	// caveat: task by filename without measure file size now.
+	for _, filename := range files {
+		task := &Task{Filename:filename}
+		c.Tasks = append(c.Tasks, task)
+	}
+	return nil
+}
 
 //
 // start a thread that listens for RPCs from worker.go
@@ -47,10 +96,16 @@ func (c *Coordinator) server() {
 //
 func (c *Coordinator) Done() bool {
 	ret := false
-
 	// Your code here.
-
-
+	if c.TaskType != REDUCE_TASK {
+		return ret
+	}
+	for _, task := range c.Tasks {
+		if task.State != COMPLETED {
+			return ret
+		}
+	}
+	ret = true
 	return ret
 }
 
@@ -60,10 +115,10 @@ func (c *Coordinator) Done() bool {
 // nReduce is the number of reduce tasks to use.
 //
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
-	c := Coordinator{}
+	c := Coordinator{ NReduce: nReduce}
 
 	// Your code here.
-
+	c.MakeTasks(files)
 
 	c.server()
 	return &c

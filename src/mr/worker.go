@@ -1,10 +1,14 @@
 package mr
 
-import "fmt"
-import "log"
-import "net/rpc"
-import "hash/fnv"
-
+import (
+	"fmt"
+	"hash/fnv"
+	"io/ioutil"
+	"log"
+	"net/rpc"
+	"os"
+	"time"
+)
 
 //
 // Map functions return a slice of KeyValue.
@@ -30,6 +34,42 @@ func ihash(key string) int {
 //
 func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
+	for true {
+		assignArgs := AssignArgs{WorkerId: -1}
+		assignReply := AssignReply{}
+		ok := call("Coordinator.Assign", &assignArgs, &assignReply)
+		if ok {
+			filename := assignReply.Filename
+			switch assignReply.TaskType {
+			case MAP_TASK:
+				file, err := os.Open(filename)
+				if err != nil {
+					log.Fatalf("can not read file %v", filename)
+				}
+				content, err := ioutil.ReadAll(file)
+				if err != nil {
+					log.Fatalf("can not read file %v", filename)
+				}
+				file.Close()
+				kva := mapf(filename, string(content))
+				for _, kv := range(kva) {
+					oname := fmt.Sprintf("mr-%v", kv.Key) // mr-X-Y
+					err := ioutil.WriteFile(oname, []byte(fmt.Sprintf("%v:%v\n", kv.Key, kv.Value)), 0666)
+					if err != nil {
+						log.Fatal(err)
+					}
+				}
+				break
+			case REDUCE_TASK:
+				break
+			default:
+				break
+			}
+		} else {
+			fmt.Println("call faild")
+		}
+		time.Sleep(time.Second)
+	}
 
 	// Your worker implementation here.
 
