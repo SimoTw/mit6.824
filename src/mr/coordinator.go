@@ -1,6 +1,7 @@
 package mr
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -60,15 +61,20 @@ func (c *Coordinator) Assign(args *AssignArgs, reply *AssignReply) error {
 		reply.WorkerId = c.NextWorkerId
 		c.NextWorkerId += 1
 	}
-	// how to keep the worker ids?
-	for _, task := range c.Tasks {
-		if (task.State == IDLE) {
-			reply.Filename = task.Filename
-			reply.TaskType = c.TaskType
-			reply.NReduce = c.NReduce
-			break
+	if c.TaskType == MAP_TASK {
+		for _, task := range c.Tasks {
+			if (task.State == IDLE) {
+				reply.Filename = task.Filename
+				reply.TaskType = c.TaskType
+				reply.NReduce = c.NReduce
+				break
+			}
 		}
+	} else {
+		fmt.Println("get a reduce task")
+		// reduce heres
 	}
+
 	return nil
 }
 
@@ -148,7 +154,7 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 
 	// Your code here.
 	c.MakeTasks(files)
-
+	go c.Timer()
 	c.server()
 	return &c
 }
