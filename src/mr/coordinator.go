@@ -59,6 +59,7 @@ func (c *Coordinator) Assign(args *AssignArgs, reply *AssignReply) error {
 		if (task.State == IDLE) {
 			reply.Filename = task.Filename
 			reply.TaskType = c.TaskType
+			reply.NReduce = c.NReduce
 			break
 		}
 	}
