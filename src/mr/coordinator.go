@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/rpc"
 	"os"
+	"time"
 )
 
 type STATE int
@@ -28,7 +29,7 @@ const TIMER_LIMIT = 10
 type Task struct {
 	Filename string
 	State STATE
-	// timer int
+	Timer int
 }
 
 
@@ -113,6 +114,28 @@ func (c *Coordinator) Done() bool {
 	}
 	ret = true
 	return ret
+}
+
+func (c *Coordinator) Timer() {
+	time.Sleep(time.Second)
+	for _, task := range(c.Tasks) {
+		task.Timer += 1
+		if task.Timer >= TIMER_LIMIT && task.State != COMPLETED{
+			task.State = IDLE
+		}
+	}
+	if c.TaskType == MAP_TASK {
+		allDone := true
+		for _, task := range(c.Tasks) {
+			if task.State != COMPLETED{
+				allDone = false
+				break
+			}
+		}
+		if allDone {
+			c.TaskType = REDUCE_TASK
+		}
+	}
 }
 
 //
