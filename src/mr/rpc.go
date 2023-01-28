@@ -33,6 +33,7 @@ type AssignReply struct {
 	Filename string
 	TaskType TASK_TYPE
 	NReduce int
+	WorkerId int
 }
 
 // Cook up a unique-ish UNIX-domain socket name

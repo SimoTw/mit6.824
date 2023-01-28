@@ -38,6 +38,7 @@ type Coordinator struct {
 	Tasks []*Task
 	NReduce int
 	TaskType TASK_TYPE
+	NextWorkerId int
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -54,6 +55,10 @@ func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
 
 
 func (c *Coordinator) Assign(args *AssignArgs, reply *AssignReply) error {
+	if args.WorkerId == -1 {
+		reply.WorkerId = c.NextWorkerId
+		c.NextWorkerId += 1
+	}
 	// how to keep the worker ids?
 	for _, task := range c.Tasks {
 		if (task.State == IDLE) {

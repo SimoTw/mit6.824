@@ -54,7 +54,7 @@ func Worker(mapf func(string, string) []KeyValue,
 				file.Close()
 				kva := mapf(filename, string(content))
 				for _, kv := range(kva) {
-					oname := fmt.Sprintf("mr-%v", ihash(kv.Key) % assignReply.NReduce) // mr-X-Y
+					oname := fmt.Sprintf("mr-%v-%v", assignReply.WorkerId,ihash(kv.Key) % assignReply.NReduce) // mr-X-Y
 					err := ioutil.WriteFile(oname, []byte(fmt.Sprintf("%v:%v\n", kv.Key, kv.Value)), 0666)
 					if err != nil {
 						log.Fatal(err)
