@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/rpc"
 	"os"
-	"time"
 )
 
 type STATE int
@@ -121,11 +120,13 @@ func (c *Coordinator) server() {
 // if the entire job has finished.
 //
 func (c *Coordinator) Done() bool {
-	return c.TaskType == REDUCE_TASK && c.UncompletedTasksCount == 0
+	ret := c.TaskType == REDUCE_TASK && c.UncompletedTasksCount == 0
+	c.Timer()
+	return ret
 }
 
 func (c *Coordinator) Timer() {
-	time.Sleep(time.Second)
+	// time.Sleep(time.Second)
 	for _, task := range(c.Tasks) {
 		task.Timer += 1
 		if task.Timer >= TIMER_LIMIT && task.State != COMPLETED{
@@ -147,7 +148,7 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 
 	// Your code here.
 	c.MakeTasks(files)
-	go c.Timer()
+	// go c.Timer()
 	c.server()
 	return &c
 }
