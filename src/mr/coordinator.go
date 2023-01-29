@@ -39,6 +39,7 @@ type Coordinator struct {
 	// Your definitions here.
 	Tasks []*Task
 	NReduce int
+	UncompletedTasksCount int
 	TaskType TASK_TYPE
 	NextWorkerId int
 }
@@ -82,6 +83,7 @@ func (c *Coordinator) Complete(args *CompleteArgs, reply *CompleteReply) error {
 	for _, task := range(c.Tasks) {
 		if task.Filename == args.Filename {
 			task.State = COMPLETED
+			c.UncompletedTasksCount -= 1
 			break
 		}
 	}
@@ -94,6 +96,7 @@ func (c *Coordinator) MakeTasks(files []string) error {
 		task := &Task{Filename:filename}
 		c.Tasks = append(c.Tasks, task)
 	}
+	c.UncompletedTasksCount = len(files)
 	return nil
 }
 
@@ -118,18 +121,7 @@ func (c *Coordinator) server() {
 // if the entire job has finished.
 //
 func (c *Coordinator) Done() bool {
-	ret := false
-	// Your code here.
-	if c.TaskType != REDUCE_TASK {
-		return ret
-	}
-	for _, task := range c.Tasks {
-		if task.State != COMPLETED {
-			return ret
-		}
-	}
-	ret = true
-	return ret
+	return c.TaskType == REDUCE_TASK && c.UncompletedTasksCount == 0
 }
 
 func (c *Coordinator) Timer() {
@@ -140,17 +132,8 @@ func (c *Coordinator) Timer() {
 			task.State = IDLE
 		}
 	}
-	if c.TaskType == MAP_TASK {
-		allDone := true
-		for _, task := range(c.Tasks) {
-			if task.State != COMPLETED{
-				allDone = false
-				break
-			}
-		}
-		if allDone {
+	if c.TaskType == MAP_TASK && c.UncompletedTasksCount == 0 {
 			c.TaskType = REDUCE_TASK
-		}
 	}
 }
 
