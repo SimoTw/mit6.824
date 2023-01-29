@@ -44,10 +44,12 @@ func Worker(mapf func(string, string) []KeyValue,
 			case MAP_TASK:
 				file, err := os.Open(filename)
 				if err != nil {
+					fmt.Println(err)
 					log.Fatalf("can not read file %v", filename)
 				}
 				content, err := io.ReadAll(file)
 				if err != nil {
+					fmt.Println(err)
 					log.Fatalf("can not read file %v", filename)
 				}
 				file.Close()
