@@ -56,12 +56,6 @@ func (c *SafeCounter) Dec() {
 	c.mu.Unlock()
 }
 
-func (c *SafeCounter) Set(v int) {
-	c.mu.Lock()
-	c.count = v
-	c.mu.Unlock()
-}
-
 func (c *SafeCounter) Value() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -133,14 +127,14 @@ func (c *Coordinator) Complete(args *CompleteArgs, reply *CompleteReply) error {
 	return nil
 }
 
-func (c *Coordinator) MakeTasks(files []string) error {
+func (c *Coordinator) Init(files []string) error {
 	// caveat: task by filename without measure file size now.
 	for _, filename := range files {
 		task := &Task{Filename: filename}
 		c.MapTasks.Tasks = append(c.MapTasks.Tasks, task)
 	}
-	c.MapTasks.RemainCount.Set(len(files))
-	c.ReduceTasks.RemainCount.Set(c.NReduce)
+	c.MapTasks.RemainCount = &SafeCounter{count: len(files)}
+	c.ReduceTasks.RemainCount = &SafeCounter{count: c.NReduce}
 	return nil
 }
 
@@ -191,7 +185,7 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := Coordinator{NReduce: nReduce}
 
 	// Your code here.
-	c.MakeTasks(files)
+	c.Init(files)
 	c.server()
 	return &c
 }
