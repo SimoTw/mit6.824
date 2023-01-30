@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/rpc"
 	"os"
+	"sync"
 )
 
 type STATE int
@@ -28,12 +29,12 @@ const TIMER_LIMIT = 10
 type Task struct {
 	Filename string
 	State    STATE
-	Timer    int
+	Timer    int // todo: add a lock here
 }
 
 type Tasks struct {
 	Tasks       []*Task
-	RemainCount int
+	RemainCount *SafeCounter
 }
 
 type Coordinator struct {
@@ -42,6 +43,29 @@ type Coordinator struct {
 	ReduceTasks  Tasks
 	NReduce      int
 	NextWorkerId int
+}
+
+type SafeCounter struct {
+	count int
+	mu    sync.Mutex
+}
+
+func (c *SafeCounter) Dec() {
+	c.mu.Lock()
+	c.count -= 1
+	c.mu.Unlock()
+}
+
+func (c *SafeCounter) Set(v int) {
+	c.mu.Lock()
+	c.count = v
+	c.mu.Unlock()
+}
+
+func (c *SafeCounter) Value() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.count
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -55,7 +79,7 @@ func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
 }
 
 func (c *Coordinator) GetTaskType() TASK_TYPE {
-	if c.MapTasks.RemainCount != 0 {
+	if c.MapTasks.RemainCount.Value() != 0 {
 		return MAP_TASK
 	} else {
 		return REDUCE_TASK
@@ -102,7 +126,7 @@ func (c *Coordinator) Complete(args *CompleteArgs, reply *CompleteReply) error {
 	for _, task := range tasks.Tasks {
 		if task.Filename == args.Filename {
 			task.State = COMPLETED
-			tasks.RemainCount -= 1
+			tasks.RemainCount.Dec()
 			break
 		}
 	}
@@ -115,8 +139,8 @@ func (c *Coordinator) MakeTasks(files []string) error {
 		task := &Task{Filename: filename}
 		c.MapTasks.Tasks = append(c.MapTasks.Tasks, task)
 	}
-	c.MapTasks.RemainCount = len(files)
-	c.ReduceTasks.RemainCount = c.NReduce
+	c.MapTasks.RemainCount.Set(len(files))
+	c.ReduceTasks.RemainCount.Set(c.NReduce)
 	return nil
 }
 
@@ -137,7 +161,7 @@ func (c *Coordinator) server() {
 // main/mrcoordinator.go calls Done() periodically to find out
 // if the entire job has finished.
 func (c *Coordinator) Done() bool {
-	ret := c.MapTasks.RemainCount == 0 && c.ReduceTasks.RemainCount == 0
+	ret := c.MapTasks.RemainCount.Value() == 0 && c.ReduceTasks.RemainCount.Value() == 0
 	c.HandleTimeoutTasks()
 	return ret
 }
