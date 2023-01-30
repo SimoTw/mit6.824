@@ -79,7 +79,7 @@ func Worker(mapf func(string, string) []KeyValue,
 						log.Fatal(err)
 					}	
 				}
-				completeArgs := CompleteArgs{Filename: assignReply.Filename}
+				completeArgs := CompleteArgs{Filename: assignReply.Filename, TaskType:assignReply.TaskType}
 				completeReply := CompleteReply{}
 				ok = false
 				for !ok {
