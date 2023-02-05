@@ -32,6 +32,7 @@ type AssignArgs struct {
 type CompleteArgs struct {
 	Filename string
 	TaskType TASK_TYPE
+	WorkerId int
 }
 
 type CompleteReply struct {}

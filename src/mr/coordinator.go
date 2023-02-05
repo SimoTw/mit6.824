@@ -39,10 +39,11 @@ type Tasks struct {
 
 type Coordinator struct {
 	// Your definitions here.
-	MapTasks     Tasks
-	ReduceTasks  Tasks
-	NReduce      int
-	NextWorkerId int
+	MapTasks              Tasks
+	ReduceTasks           Tasks
+	NReduce               int
+	NextWorkerId          int
+	CompletedMapWorlerIds []int
 }
 
 type SafeCounter struct {
@@ -143,9 +144,10 @@ func (c *Coordinator) Complete(args *CompleteArgs, reply *CompleteReply) error {
 func (c *Coordinator) HandleMapComplete(args *CompleteArgs, reply *CompleteReply) error {
 	var tasks *Tasks = &c.MapTasks
 	for _, task := range tasks.Tasks {
-		if task.Filename == args.Filename {
+		if task.Filename == args.Filename && task.State != COMPLETED {
 			task.State = COMPLETED
 			tasks.RemainCount.Dec()
+			c.CompletedMapWorlerIds = append(c.CompletedMapWorlerIds, args.WorkerId)
 			break
 		}
 	}
