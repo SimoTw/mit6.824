@@ -1,6 +1,7 @@
 package mr
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -27,9 +28,10 @@ const (
 const TIMER_LIMIT = 10
 
 type Task struct {
-	Filename string
-	State    STATE
-	Timer    int // todo: add a lock here
+	Filename  string
+	Filenames []string
+	State     STATE
+	Timer     int // todo: add a lock here
 }
 
 type Tasks struct {
@@ -39,8 +41,8 @@ type Tasks struct {
 
 type Coordinator struct {
 	// Your definitions here.
-	MapTasks              Tasks
-	ReduceTasks           Tasks
+	MapTasks              *Tasks
+	ReduceTasks           *Tasks
 	NReduce               int
 	NextWorkerId          int
 	CompletedMapWorlerIds []int
@@ -98,7 +100,18 @@ func (c *Coordinator) AssignMap(args *AssignArgs, reply *AssignReply) error {
 }
 
 func (c *Coordinator) AssignReduce(args *AssignArgs, reply *AssignReply) error {
-
+	if args.WorkerId == -1 {
+		reply.WorkerId = c.NextWorkerId
+		c.NextWorkerId += 1
+	}
+	for _, task := range c.MapTasks.Tasks {
+		if task.State == IDLE {
+			reply.Filenames = task.Filenames
+			reply.TaskType = MAP_TASK
+			reply.NReduce = c.NReduce
+			break
+		}
+	}
 	return nil
 }
 
@@ -114,8 +127,6 @@ func (c *Coordinator) Assign(args *AssignArgs, reply *AssignReply) error {
 	case REDUCE_TASK:
 		{
 			c.AssignReduce(args, reply)
-			// last map worker id
-			// reduce ID
 			break
 		}
 	default:
@@ -142,7 +153,7 @@ func (c *Coordinator) Complete(args *CompleteArgs, reply *CompleteReply) error {
 }
 
 func (c *Coordinator) HandleMapComplete(args *CompleteArgs, reply *CompleteReply) error {
-	var tasks *Tasks = &c.MapTasks
+	var tasks *Tasks = c.MapTasks
 	for _, task := range tasks.Tasks {
 		if task.Filename == args.Filename && task.State != COMPLETED {
 			task.State = COMPLETED
@@ -150,6 +161,9 @@ func (c *Coordinator) HandleMapComplete(args *CompleteArgs, reply *CompleteReply
 			c.CompletedMapWorlerIds = append(c.CompletedMapWorlerIds, args.WorkerId)
 			break
 		}
+	}
+	if c.MapTasks.RemainCount.Value() == 0 {
+		c.InitReduceTasks()
 	}
 	return nil
 }
@@ -169,9 +183,16 @@ func (c *Coordinator) Init(files []string) error {
 	return nil
 }
 
-func (c *Coordinator) GenerateReduceTasks() {
-	// filename: oname := fmt.Sprintf("mr-%v-%v", assignReply.WorkerId, i) // mr-X-Y
-
+func (c *Coordinator) InitReduceTasks() {
+	for i := 0; i < c.NReduce; i++ {
+		task := &Task{Filenames: []string{}, State: IDLE, Timer: 0}
+		for _, workerId := range c.CompletedMapWorlerIds {
+			filename := fmt.Sprintf("mr-%v-%v", workerId, i)
+			task.Filenames = append(task.Filenames, filename)
+		}
+		c.MapTasks.Tasks = append(c.MapTasks.Tasks, task)
+	}
+	c.NextWorkerId = 0
 }
 
 // start a thread that listens for RPCs from worker.go
@@ -201,9 +222,9 @@ func (c *Coordinator) HandleTimeoutTasks() {
 	taskType := c.GetTaskType()
 	var tasks *Tasks
 	if taskType == MAP_TASK {
-		tasks = &c.MapTasks
+		tasks = c.MapTasks
 	} else {
-		tasks = &c.ReduceTasks
+		tasks = c.ReduceTasks
 	}
 	for _, task := range tasks.Tasks {
 		task.Timer += 1

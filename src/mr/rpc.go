@@ -35,13 +35,14 @@ type CompleteArgs struct {
 	WorkerId int
 }
 
-type CompleteReply struct {}
+type CompleteReply struct{}
 
 type AssignReply struct {
-	Filename string
-	TaskType TASK_TYPE
-	NReduce int
-	WorkerId int
+	Filename  string
+	Filenames []string
+	TaskType  TASK_TYPE
+	NReduce   int
+	WorkerId  int
 }
 
 // Cook up a unique-ish UNIX-domain socket name
