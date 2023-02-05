@@ -80,27 +80,41 @@ func (c *Coordinator) GetTaskType() TASK_TYPE {
 	}
 }
 
-func (c *Coordinator) Assign(args *AssignArgs, reply *AssignReply) error {
+func (c *Coordinator) AssignMap(args *AssignArgs, reply *AssignReply) error {
 	if args.WorkerId == -1 {
 		reply.WorkerId = c.NextWorkerId
 		c.NextWorkerId += 1
 	}
+	for _, task := range c.MapTasks.Tasks {
+		if task.State == IDLE {
+			reply.Filename = task.Filename
+			reply.TaskType = MAP_TASK
+			reply.NReduce = c.NReduce
+			break
+		}
+	}
+	return nil
+}
+
+func (c *Coordinator) AssignReduce(args *AssignArgs, reply *AssignReply) error {
+
+	return nil
+}
+
+func (c *Coordinator) Assign(args *AssignArgs, reply *AssignReply) error {
+
 	taskType := c.GetTaskType()
 	switch taskType {
 	case MAP_TASK:
 		{
-			for _, task := range c.MapTasks.Tasks {
-				if task.State == IDLE {
-					reply.Filename = task.Filename
-					reply.TaskType = MAP_TASK
-					reply.NReduce = c.NReduce
-					break
-				}
-			}
+			c.AssignMap(args, reply)
 			break
 		}
 	case REDUCE_TASK:
 		{
+			c.AssignReduce(args, reply)
+			// last map worker id
+			// reduce ID
 			break
 		}
 	default:
@@ -111,12 +125,23 @@ func (c *Coordinator) Assign(args *AssignArgs, reply *AssignReply) error {
 }
 
 func (c *Coordinator) Complete(args *CompleteArgs, reply *CompleteReply) error {
-	var tasks *Tasks
 	if args.TaskType == MAP_TASK {
-		tasks = &c.MapTasks
-	} else {
-		tasks = &c.ReduceTasks
+		err := c.HandleMapComplete(args, reply)
+		if err != nil {
+			return err
+		}
+	} else if args.TaskType == REDUCE_TASK {
+		err := c.HandleReduceComplete(args, reply)
+		if err != nil {
+			return err
+		}
 	}
+
+	return nil
+}
+
+func (c *Coordinator) HandleMapComplete(args *CompleteArgs, reply *CompleteReply) error {
+	var tasks *Tasks = &c.MapTasks
 	for _, task := range tasks.Tasks {
 		if task.Filename == args.Filename {
 			task.State = COMPLETED
@@ -124,6 +149,10 @@ func (c *Coordinator) Complete(args *CompleteArgs, reply *CompleteReply) error {
 			break
 		}
 	}
+	return nil
+}
+
+func (c *Coordinator) HandleReduceComplete(args *CompleteArgs, reply *CompleteReply) error {
 	return nil
 }
 
@@ -136,6 +165,11 @@ func (c *Coordinator) Init(files []string) error {
 	c.MapTasks.RemainCount = &SafeCounter{count: len(files)}
 	c.ReduceTasks.RemainCount = &SafeCounter{count: c.NReduce}
 	return nil
+}
+
+func (c *Coordinator) GenerateReduceTasks() {
+	// filename: oname := fmt.Sprintf("mr-%v-%v", assignReply.WorkerId, i) // mr-X-Y
+
 }
 
 // start a thread that listens for RPCs from worker.go
