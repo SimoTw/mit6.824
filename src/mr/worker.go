@@ -41,6 +41,10 @@ func Worker(mapf func(string, string) []KeyValue,
 				}
 				break
 			case REDUCE_TASK:
+				err := handleReduceTask(assignArgs, assignReply, reducef)
+				if err != nil {
+					fmt.Println(err)
+				}
 				break
 			default:
 				break
@@ -105,6 +109,10 @@ func handleMapTask(assignArgs *AssignArgs, assignReply *AssignReply, mapf func(s
 		ok = call("Coordinator.Complete", &completeArgs, &completeReply)
 		time.Sleep(time.Second)
 	}
+	return nil
+}
+
+func handleReduceTask(assignArgs *AssignArgs, assignReply *AssignReply, reducef func(string, []string) string) error {
 	return nil
 }
 
