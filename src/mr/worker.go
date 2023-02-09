@@ -1,6 +1,7 @@
 package mr
 
 import (
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -86,12 +87,17 @@ func handleMapTask(assignArgs *AssignArgs, assignReply *AssignReply, mapf func(s
 		}
 		files = append(files, f)
 	}
+	encs := []*json.Encoder{}
+	for _, f := range files {
+		enc := json.NewEncoder(f)
+		encs = append(encs, enc)
+	}
 	for _, kv := range kva {
-		fmt.Printf("Key: %v, Value: %v\n", kv.Key, kv.Value)
 		i := ihash(kv.Key) % assignReply.NReduce
-		f := files[i]
-		_, err = f.Write([]byte(fmt.Sprintf("%v:%v\n", kv.Key, kv.Value)))
+		enc := encs[i]
+		err := enc.Encode(&kv)
 		if err != nil {
+			f := files[i]
 			f.Close() // ignore error; Write error takes precedence
 			log.Fatal(err)
 		}
