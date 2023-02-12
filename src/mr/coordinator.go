@@ -27,11 +27,16 @@ const (
 
 const TIMER_LIMIT = 10
 
+type SafeState struct {
+	State STATE
+	mu    sync.Mutex
+}
+
 type Task struct {
 	Filename  string
 	Filenames []string
-	State     STATE
-	Timer     int // todo: add a lock here
+	State     *SafeState // add a lock
+	Timer     int        // todo: add a lock here
 }
 
 type Tasks struct {
@@ -65,6 +70,22 @@ func (c *SafeCounter) Value() int {
 	return c.count
 }
 
+func (s *SafeState) GetState() STATE {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.State
+
+}
+
+func (s *SafeState) SetState(state STATE) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.State == COMPLETED {
+		return
+	}
+	s.State = state
+}
+
 // Your code here -- RPC handlers for the worker to call.
 
 // an example RPC handler.
@@ -89,7 +110,7 @@ func (c *Coordinator) AssignMap(args *AssignArgs, reply *AssignReply) error {
 		c.NextWorkerId += 1
 	}
 	for _, task := range c.MapTasks.Tasks {
-		if task.State == IDLE {
+		if task.State.GetState() == IDLE {
 			reply.Filename = task.Filename
 			reply.TaskType = MAP_TASK
 			reply.NReduce = c.NReduce
@@ -105,7 +126,7 @@ func (c *Coordinator) AssignReduce(args *AssignArgs, reply *AssignReply) error {
 		c.NextWorkerId += 1
 	}
 	for _, task := range c.MapTasks.Tasks {
-		if task.State == IDLE {
+		if task.State.GetState() == IDLE {
 			reply.Filenames = task.Filenames
 			reply.TaskType = MAP_TASK
 			reply.NReduce = c.NReduce
@@ -153,10 +174,14 @@ func (c *Coordinator) Complete(args *CompleteArgs, reply *CompleteReply) error {
 }
 
 func (c *Coordinator) HandleMapComplete(args *CompleteArgs, reply *CompleteReply) error {
+	if c.GetTaskType() != MAP_TASK {
+		return nil
+	}
+
 	var tasks *Tasks = c.MapTasks
 	for _, task := range tasks.Tasks {
-		if task.Filename == args.Filename && task.State != COMPLETED {
-			task.State = COMPLETED
+		if task.Filename == args.Filename && task.State.GetState() != COMPLETED {
+			task.State.SetState(COMPLETED)
 			tasks.RemainCount.Dec()
 			c.CompletedMapWorlerIds = append(c.CompletedMapWorlerIds, args.WorkerId)
 			break
@@ -175,7 +200,7 @@ func (c *Coordinator) HandleReduceComplete(args *CompleteArgs, reply *CompleteRe
 func (c *Coordinator) Init(files []string) error {
 	// caveat: task by filename without measure file size now.
 	for _, filename := range files {
-		task := &Task{Filename: filename}
+		task := &Task{Filename: filename, State: &SafeState{}}
 		c.MapTasks.Tasks = append(c.MapTasks.Tasks, task)
 	}
 	c.MapTasks.RemainCount = &SafeCounter{count: len(files)}
@@ -185,7 +210,7 @@ func (c *Coordinator) Init(files []string) error {
 
 func (c *Coordinator) InitReduceTasks() {
 	for i := 0; i < c.NReduce; i++ {
-		task := &Task{Filenames: []string{}, State: IDLE, Timer: 0}
+		task := &Task{Filenames: []string{}, State: &SafeState{}, Timer: 0}
 		for _, workerId := range c.CompletedMapWorlerIds {
 			filename := fmt.Sprintf("mr-%v-%v", workerId, i)
 			task.Filenames = append(task.Filenames, filename)
@@ -228,8 +253,8 @@ func (c *Coordinator) HandleTimeoutTasks() {
 	}
 	for _, task := range tasks.Tasks {
 		task.Timer += 1
-		if task.Timer >= TIMER_LIMIT && task.State != COMPLETED {
-			task.State = IDLE
+		if task.Timer >= TIMER_LIMIT && task.State.GetState() != COMPLETED {
+			task.State.SetState(IDLE)
 		}
 	}
 
@@ -239,7 +264,10 @@ func (c *Coordinator) HandleTimeoutTasks() {
 // main/mrcoordinator.go calls this function.
 // nReduce is the number of reduce tasks to use.
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
-	c := Coordinator{NReduce: nReduce}
+	mapTasks := &Tasks{}
+	reduceTasks := &Tasks{}
+
+	c := Coordinator{NReduce: nReduce, MapTasks: mapTasks, ReduceTasks: reduceTasks}
 
 	// Your code here.
 	c.Init(files)
