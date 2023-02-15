@@ -38,8 +38,8 @@ type CompleteArgs struct {
 type CompleteReply struct{}
 
 type AssignReply struct {
-	Filename  string
-	Filenames []string
+	Filename  string   // for map
+	Filenames []string // for reduce
 	TaskType  TASK_TYPE
 	NReduce   int
 	WorkerId  int

@@ -80,8 +80,7 @@ func handleMapTask(assignArgs *AssignArgs, assignReply *AssignReply, mapf func(s
 	kva := mapf(filename, string(content))
 	files := []*os.File{}
 	for i := 0; i < assignReply.NReduce; i++ {
-		oname := fmt.Sprintf("mr-%v-%v", assignReply.WorkerId, i) // mr-X-Y
-		f, err := os.OpenFile(oname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		f, err := os.CreateTemp(".", "*")
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -102,7 +101,9 @@ func handleMapTask(assignArgs *AssignArgs, assignReply *AssignReply, mapf func(s
 			log.Fatal(err)
 		}
 	}
-	for _, f := range files {
+	for i, f := range files {
+		oname := fmt.Sprintf("mr-%v-%v", assignReply.WorkerId, i) // mr-X-Y
+		os.Rename(fmt.Sprintf("./%v", f.Name()), fmt.Sprintf("./%v", oname))
 		err = f.Close()
 		if err != nil {
 			log.Fatal(err)
