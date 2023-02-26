@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/rpc"
 	"os"
+	"sort"
 	"time"
 )
 
@@ -28,9 +29,8 @@ func ihash(key string) int {
 // main/mrworker.go calls this function.
 func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
-	done := false
-	for !done {
-		assignArgs := &AssignArgs{WorkerId: -1}
+	for true {
+		assignArgs := &AssignArgs{}
 		assignReply := &AssignReply{}
 		ok := call("Coordinator.Assign", &assignArgs, &assignReply)
 		if ok {
@@ -50,7 +50,6 @@ func Worker(mapf func(string, string) []KeyValue,
 			default:
 				break
 			}
-
 		} else {
 			fmt.Println("call faild")
 			time.Sleep(time.Second)
@@ -65,6 +64,7 @@ func Worker(mapf func(string, string) []KeyValue,
 }
 
 func handleMapTask(assignArgs *AssignArgs, assignReply *AssignReply, mapf func(string, string) []KeyValue) error {
+	var err error
 	filename := assignReply.Filename
 	file, err := os.Open(filename)
 	if err != nil {
@@ -76,7 +76,11 @@ func handleMapTask(assignArgs *AssignArgs, assignReply *AssignReply, mapf func(s
 		fmt.Println(err)
 		log.Fatalf("can not read file %v", filename)
 	}
-	file.Close()
+	err = file.Close()
+	if err != nil {
+		fmt.Println(err)
+		log.Fatalf("can not read file %v", filename)
+	}
 	kva := mapf(filename, string(content))
 	files := []*os.File{}
 	for i := 0; i < assignReply.NReduce; i++ {
@@ -96,20 +100,18 @@ func handleMapTask(assignArgs *AssignArgs, assignReply *AssignReply, mapf func(s
 		enc := encs[i]
 		err := enc.Encode(&kv)
 		if err != nil {
-			f := files[i]
-			f.Close() // ignore error; Write error takes precedence
 			log.Fatal(err)
 		}
 	}
 	for i, f := range files {
-		oname := fmt.Sprintf("mr-%v-%v", assignReply.WorkerId, i) // mr-X-Y
+		oname := fmt.Sprintf("mr-%v-%v", assignReply.TaskId, i) // mr-X-Y
 		os.Rename(fmt.Sprintf("./%v", f.Name()), fmt.Sprintf("./%v", oname))
-		err = f.Close()
+		f.Close()
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
-	completeArgs := CompleteArgs{Filename: assignReply.Filename, TaskType: assignReply.TaskType}
+	completeArgs := CompleteArgs{TaskId: assignReply.TaskId, TaskType: assignReply.TaskType}
 	completeReply := CompleteReply{}
 	ok := false
 	for !ok {
@@ -120,34 +122,55 @@ func handleMapTask(assignArgs *AssignArgs, assignReply *AssignReply, mapf func(s
 }
 
 func handleReduceTask(assignArgs *AssignArgs, assignReply *AssignReply, reducef func(string, []string) string) error {
-	return nil
-}
-
-// example function to show how to make an RPC call to the coordinator.
-//
-// the RPC argument and reply types are defined in rpc.go.
-func CallExample() {
-
-	// declare an argument structure.
-	args := ExampleArgs{}
-
-	// fill in the argument(s).
-	args.X = 99
-
-	// declare a reply structure.
-	reply := ExampleReply{}
-
-	// send the RPC request, wait for the reply.
-	// the "Coordinator.Example" tells the
-	// receiving server that we'd like to call
-	// the Example() method of struct Coordinator.
-	ok := call("Coordinator.Example", &args, &reply)
-	if ok {
-		// reply.Y should be 100.
-		fmt.Printf("reply.Y %v\n", reply.Y)
-	} else {
-		fmt.Printf("call failed!\n")
+	kva := []KeyValue{}
+	for _, filename := range assignReply.Filenames {
+		file, err := os.Open(filename)
+		if err != nil {
+			continue
+		}
+		defer file.Close()
+		dec := json.NewDecoder(file)
+		for {
+			var kv KeyValue
+			if err := dec.Decode(&kv); err != nil {
+				break
+			}
+			kva = append(kva, kv)
+		}
 	}
+	sort.Slice(kva, func(i, j int) bool {
+		return kva[i].Key < kva[j].Key
+	})
+	ofile, err := os.CreateTemp(".", "*")
+	if err != nil {
+		log.Fatal(err)
+	}
+	i := 0
+	for i < len(kva) {
+		j := i + 1
+		for j < len(kva) && kva[j].Key == kva[i].Key {
+			j++
+		}
+		values := []string{}
+		for k := i; k < j; k++ {
+			values = append(values, kva[k].Value)
+		}
+		output := reducef(kva[i].Key, values)
+		// this is the correct format for each line of Reduce output.
+		fmt.Fprintf(ofile, "%v %v\n", kva[i].Key, output)
+
+		i = j
+	}
+	oname := fmt.Sprintf("mr-%v", assignReply.TaskId)
+	os.Rename(fmt.Sprintf("./%v", ofile.Name()), fmt.Sprintf("./%v", oname))
+	completeArgs := CompleteArgs{TaskId: assignReply.TaskId, TaskType: assignReply.TaskType}
+	completeReply := CompleteReply{}
+	ok := false
+	for !ok {
+		ok = call("Coordinator.Complete", &completeArgs, &completeReply)
+		time.Sleep(time.Second)
+	}
+	return nil
 }
 
 // send an RPC request to the coordinator, wait for the response.
