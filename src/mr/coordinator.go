@@ -131,11 +131,15 @@ func (c *Coordinator) AssignMap(args *AssignArgs, reply *AssignReply) error {
 func (c *Coordinator) AssignReduce(args *AssignArgs, reply *AssignReply) error {
 	for _, task := range c.ReduceTasks.Tasks {
 		task.State.mu.Lock()
+		fmt.Println("task")
+		fmt.Println(task)
 		if task.State.State == IDLE {
 			reply.TaskId = task.Id
 			reply.Filenames = task.Filenames
 			reply.TaskType = REDUCE_TASK
 			reply.NReduce = c.NReduce
+			fmt.Println("reply")
+			fmt.Println(reply)
 			task.State.State = IN_PROGRESS
 			task.State.mu.Unlock()
 			return nil
