@@ -110,11 +110,17 @@ func (c *Coordinator) GetTaskType() TASK_TYPE {
 func (c *Coordinator) AssignMap(args *AssignArgs, reply *AssignReply) error {
 	for _, task := range c.MapTasks.Tasks {
 		task.State.mu.Lock()
+		fmt.Println("task")
+		fmt.Println(task)
 		if task.State.State == IDLE {
 			reply.Filename = task.Filename
 			reply.TaskType = MAP_TASK
 			reply.NReduce = c.NReduce
+			fmt.Println("reply")
+			fmt.Println(reply)
 			task.State.State = IN_PROGRESS
+			task.State.mu.Unlock()
+			return nil
 		}
 		task.State.mu.Unlock()
 	}
@@ -129,7 +135,8 @@ func (c *Coordinator) AssignReduce(args *AssignArgs, reply *AssignReply) error {
 			reply.TaskType = REDUCE_TASK
 			reply.NReduce = c.NReduce
 			task.State.State = IN_PROGRESS
-			break
+			task.State.mu.Unlock()
+			return nil
 		}
 		task.State.mu.Unlock()
 
@@ -159,6 +166,8 @@ func (c *Coordinator) Assign(args *AssignArgs, reply *AssignReply) error {
 
 func (c *Coordinator) Complete(args *CompleteArgs, reply *CompleteReply) error {
 	var err error
+	fmt.Println("Complete")
+	fmt.Println(args)
 	if args.TaskType == MAP_TASK {
 		err = c.HandleMapComplete(args, reply)
 	} else if args.TaskType == REDUCE_TASK {
@@ -268,6 +277,6 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := Coordinator{NReduce: nReduce, MapTasks: mapTasks, ReduceTasks: reduceTasks}
 	c.Init(files)
 	c.server()
-	go c.HandleTimeoutTasks()
+	// go c.HandleTimeoutTasks()
 	return &c
 }

@@ -80,7 +80,7 @@ func handleMapTask(assignArgs *AssignArgs, assignReply *AssignReply, mapf func(s
 	err = file.Close()
 	if err != nil {
 		fmt.Println(err)
-		log.Fatalf("can not read file %v", filename)
+		log.Fatalf("can not close file %v", filename)
 	}
 	kva := mapf(filename, string(content))
 	files := []*os.File{}
