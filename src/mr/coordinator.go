@@ -158,18 +158,20 @@ func (c *Coordinator) Assign(args *AssignArgs, reply *AssignReply) error {
 }
 
 func (c *Coordinator) Complete(args *CompleteArgs, reply *CompleteReply) error {
+	var err error
 	if args.TaskType == MAP_TASK {
-		err := c.HandleMapComplete(args, reply)
-		if err != nil {
-			return err
-		}
+		err = c.HandleMapComplete(args, reply)
 	} else if args.TaskType == REDUCE_TASK {
-		err := c.HandleReduceComplete(args, reply)
-		if err != nil {
-			return err
-		}
+		err = c.HandleReduceComplete(args, reply)
+	}
+	if err != nil {
+		return err
 	}
 
+	taskType := c.GetTaskType()
+	if taskType == MAP_TASK && c.MapTasks.RemainCount.Value() == 0 {
+		c.InitReduceTasks()
+	}
 	return nil
 }
 
@@ -180,9 +182,7 @@ func (c *Coordinator) HandleMapComplete(args *CompleteArgs, reply *CompleteReply
 			c.MapTasks.RemainCount.Dec()
 		}
 	}
-	if c.MapTasks.RemainCount.Value() == 0 {
-		c.InitReduceTasks()
-	}
+
 	return nil
 }
 
@@ -244,28 +244,16 @@ func (c *Coordinator) HandleTimeoutTasks() {
 	for !c.Done() {
 		time.Sleep(time.Second)
 		taskType := c.GetTaskType()
-		switch taskType {
-		case MAP_TASK:
-			{
-				tasks := c.MapTasks
-				for _, task := range tasks.Tasks {
-					task.Timer += 1
-					if task.Timer >= TIMER_LIMIT && task.State.GetState() != COMPLETED {
-						task.State.SetState(IDLE)
-					}
-				}
-				break
-			}
-		case REDUCE_TASK:
-			{
-				tasks := c.ReduceTasks
-				for _, task := range tasks.Tasks {
-					task.Timer += 1
-					if task.Timer >= TIMER_LIMIT && task.State.GetState() != COMPLETED {
-						task.State.SetState(IDLE)
-					}
-				}
-				break
+		var tasks []*Task
+		if taskType == MAP_TASK {
+			tasks = c.MapTasks.Tasks
+		} else {
+			tasks = c.ReduceTasks.Tasks
+		}
+		for _, task := range tasks {
+			task.Timer += 1
+			if task.Timer >= TIMER_LIMIT && task.State.GetState() != COMPLETED {
+				task.State.SetState(IDLE)
 			}
 		}
 	}
