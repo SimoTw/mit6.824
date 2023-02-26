@@ -33,7 +33,11 @@ func Worker(mapf func(string, string) []KeyValue,
 		assignArgs := &AssignArgs{}
 		assignReply := &AssignReply{}
 		ok := call("Coordinator.Assign", &assignArgs, &assignReply)
+
 		if ok {
+			fmt.Println("assignReply")
+			fmt.Println(assignReply)
+
 			switch assignReply.TaskType {
 			case MAP_TASK:
 				err := handleMapTask(assignArgs, assignReply, mapf)

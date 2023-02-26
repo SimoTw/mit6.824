@@ -126,14 +126,13 @@ func (c *Coordinator) AssignMap(args *AssignArgs, reply *AssignReply) error {
 		}
 		task.State.mu.Unlock()
 	}
-	reply.TaskType = IDLE_TASK
 	return nil
 }
 
 func (c *Coordinator) AssignReduce(args *AssignArgs, reply *AssignReply) error {
 	for _, task := range c.ReduceTasks.Tasks {
 		task.State.mu.Lock()
-		fmt.Println("task")
+		fmt.Println("reduce task")
 		fmt.Println(task)
 		if task.State.State == IDLE {
 			reply.TaskId = task.Id
@@ -169,6 +168,12 @@ func (c *Coordinator) Assign(args *AssignArgs, reply *AssignReply) error {
 		log.Fatalf("Unsupporte task type %v", taskType)
 	}
 
+	if reply.Filename == "" && len(reply.Filenames) == 0 {
+		reply.TaskType = IDLE_TASK
+		fmt.Println("IDLE_TASK")
+		fmt.Println(reply)
+	}
+
 	return nil
 }
 
@@ -185,8 +190,7 @@ func (c *Coordinator) Complete(args *CompleteArgs, reply *CompleteReply) error {
 		return err
 	}
 
-	taskType := c.GetTaskType()
-	if taskType == MAP_TASK && c.MapTasks.RemainCount.Value() == 0 {
+	if c.MapTasks.RemainCount.Value() == 0 {
 		c.InitReduceTasks()
 	}
 	return nil
@@ -226,7 +230,7 @@ func (c *Coordinator) Init(files []string) error {
 
 func (c *Coordinator) InitReduceTasks() {
 	for i := 0; i < c.NReduce; i++ {
-		task := &Task{Filenames: []string{}, State: &SafeState{}, Timer: 0}
+		task := &Task{Id: i, Filenames: []string{}, State: &SafeState{}, Timer: 0}
 		for _, task := range c.MapTasks.Tasks {
 			filename := fmt.Sprintf("mr-%v-%v", task.Id, i)
 			task.Filenames = append(task.Filenames, filename)
@@ -234,6 +238,14 @@ func (c *Coordinator) InitReduceTasks() {
 		// note: may have a locality issue here
 		c.ReduceTasks.Tasks = append(c.ReduceTasks.Tasks, task)
 	}
+	fmt.Println("InitReduceTasks")
+	str := ""
+	for _, task := range c.ReduceTasks.Tasks {
+		str += fmt.Sprintf("%v\n", task)
+	}
+
+	fmt.Println(str)
+
 }
 
 // start a thread that listens for RPCs from worker.go
