@@ -47,6 +47,8 @@ func Worker(mapf func(string, string) []KeyValue,
 					fmt.Println(err)
 				}
 				break
+			case IDLE_TASK:
+				time.Sleep(time.Second)
 			default:
 				break
 			}

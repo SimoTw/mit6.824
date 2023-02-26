@@ -24,6 +24,7 @@ type TASK_TYPE int
 const (
 	MAP_TASK    TASK_TYPE = 0
 	REDUCE_TASK TASK_TYPE = 1
+	IDLE_TASK   TASK_TYPE = 2
 )
 
 const TIMER_LIMIT = 10
@@ -125,6 +126,7 @@ func (c *Coordinator) AssignMap(args *AssignArgs, reply *AssignReply) error {
 		}
 		task.State.mu.Unlock()
 	}
+	reply.TaskType = IDLE_TASK
 	return nil
 }
 
