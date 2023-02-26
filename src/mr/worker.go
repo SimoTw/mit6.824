@@ -50,6 +50,7 @@ func Worker(mapf func(string, string) []KeyValue,
 			default:
 				break
 			}
+			time.Sleep(time.Second)
 		} else {
 			fmt.Println("call faild")
 			time.Sleep(time.Second)
@@ -147,26 +148,22 @@ func handleReduceTask(assignArgs *AssignArgs, assignReply *AssignReply, reducef 
 	}
 	i := 0
 	for i < len(kva) {
-		j := i + 1
-		for j < len(kva) && kva[j].Key == kva[i].Key {
-			j++
-		}
+		j := i
 		values := []string{}
-		for k := i; k < j; k++ {
-			values = append(values, kva[k].Value)
+		for j < len(kva) && kva[j].Key == kva[i].Key {
+			values = append(values, kva[j].Value)
 		}
 		output := reducef(kva[i].Key, values)
 		// this is the correct format for each line of Reduce output.
 		fmt.Fprintf(ofile, "%v %v\n", kva[i].Key, output)
-
-		i = j
+		i = j + 1
 	}
 	oname := fmt.Sprintf("mr-%v", assignReply.TaskId)
 	os.Rename(fmt.Sprintf("./%v", ofile.Name()), fmt.Sprintf("./%v", oname))
-	completeArgs := CompleteArgs{TaskId: assignReply.TaskId, TaskType: assignReply.TaskType}
-	completeReply := CompleteReply{}
 	ok := false
 	for !ok {
+		completeArgs := CompleteArgs{TaskId: assignReply.TaskId, TaskType: assignReply.TaskType}
+		completeReply := CompleteReply{}
 		ok = call("Coordinator.Complete", &completeArgs, &completeReply)
 		time.Sleep(time.Second)
 	}
