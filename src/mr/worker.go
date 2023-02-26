@@ -49,6 +49,9 @@ func Worker(mapf func(string, string) []KeyValue,
 				break
 			case IDLE_TASK:
 				time.Sleep(time.Second)
+				fmt.Println("IDLE_FINISHED")
+
+				break
 			default:
 				break
 			}
@@ -126,6 +129,9 @@ func handleMapTask(assignArgs *AssignArgs, assignReply *AssignReply, mapf func(s
 
 func handleReduceTask(assignArgs *AssignArgs, assignReply *AssignReply, reducef func(string, []string) string) error {
 	kva := []KeyValue{}
+	fmt.Println("handle Reduce")
+	fmt.Println(assignReply)
+
 	for _, filename := range assignReply.Filenames {
 		file, err := os.Open(filename)
 		if err != nil {
