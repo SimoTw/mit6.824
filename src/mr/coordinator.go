@@ -190,9 +190,6 @@ func (c *Coordinator) Complete(args *CompleteArgs, reply *CompleteReply) error {
 		return err
 	}
 
-	if c.MapTasks.RemainCount.Value() == 0 {
-		c.InitReduceTasks()
-	}
 	return nil
 }
 
@@ -201,6 +198,9 @@ func (c *Coordinator) HandleMapComplete(args *CompleteArgs, reply *CompleteReply
 		if task.Id == args.TaskId && task.State.GetState() != COMPLETED {
 			task.State.SetState(COMPLETED)
 			c.MapTasks.RemainCount.Dec()
+			if c.MapTasks.RemainCount.Value() == 0 {
+				c.InitReduceTasks()
+			}
 		}
 	}
 
