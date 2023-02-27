@@ -73,16 +73,16 @@ func (c *SafeCounter) Dec() {
 	c.mu.Unlock()
 }
 
-func (c *SafeCounter) Value() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.count
-}
-
 func (c *SafeCounter) Inc() {
 	c.mu.Lock()
 	c.count += 1
 	c.mu.Unlock()
+}
+
+func (c *SafeCounter) Value() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.count
 }
 
 func (s *SafeState) GetState() STATE {
@@ -224,7 +224,7 @@ func (c *Coordinator) HandleReduceComplete(args *CompleteArgs, reply *CompleteRe
 func (c *Coordinator) Init(files []string) error {
 	// caveat: task by filename without measure file size now.
 	for i, filename := range files {
-		task := &Task{Id: i, Filename: filename, State: &SafeState{}}
+		task := &Task{Id: i, Filename: filename, State: &SafeState{}, Timer: &SafeCounter{}}
 		c.MapTasks.Tasks = append(c.MapTasks.Tasks, task)
 	}
 	c.MapTasks.RemainCount = &SafeCounter{count: len(files)}
