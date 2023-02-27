@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/rpc"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -141,6 +142,9 @@ func (c *Coordinator) AssignReduce(args *AssignArgs, reply *AssignReply) error {
 			reply.NReduce = c.NReduce
 			fmt.Println("reply")
 			fmt.Println(reply)
+			fmt.Println("reply filenames")
+			fmt.Println(strings.Join(reply.Filenames, "\n"))
+
 			task.State.State = IN_PROGRESS
 			task.State.mu.Unlock()
 			return nil
@@ -229,10 +233,11 @@ func (c *Coordinator) Init(files []string) error {
 }
 
 func (c *Coordinator) InitReduceTasks() {
+	// todo: debug here
 	for i := 0; i < c.NReduce; i++ {
 		task := &Task{Id: i, Filenames: []string{}, State: &SafeState{}, Timer: 0}
-		for _, task := range c.MapTasks.Tasks {
-			filename := fmt.Sprintf("mr-%v-%v", task.Id, i)
+		for _, mapTask := range c.MapTasks.Tasks {
+			filename := fmt.Sprintf("mr-%v-%v", mapTask.Id, i)
 			task.Filenames = append(task.Filenames, filename)
 		}
 		// note: may have a locality issue here

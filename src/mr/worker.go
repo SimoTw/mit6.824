@@ -158,24 +158,32 @@ func handleReduceTask(assignArgs *AssignArgs, assignReply *AssignReply, reducef 
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	i := 0
 	for i < len(kva) {
-		j := i
-		values := []string{}
+		j := i + 1
 		for j < len(kva) && kva[j].Key == kva[i].Key {
-			values = append(values, kva[j].Value)
+			j++
+		}
+		values := []string{}
+		for k := i; k < j; k++ {
+			values = append(values, kva[k].Value)
 		}
 		output := reducef(kva[i].Key, values)
+
 		// this is the correct format for each line of Reduce output.
 		fmt.Fprintf(ofile, "%v %v\n", kva[i].Key, output)
-		i = j + 1
+		i = j
 	}
+
 	oname := fmt.Sprintf("mr-%v", assignReply.TaskId)
 	os.Rename(fmt.Sprintf("./%v", ofile.Name()), fmt.Sprintf("./%v", oname))
 	ok := false
 	for !ok {
 		completeArgs := CompleteArgs{TaskId: assignReply.TaskId, TaskType: assignReply.TaskType}
 		completeReply := CompleteReply{}
+		fmt.Println("completeArgs")
+		fmt.Println(completeArgs)
 		ok = call("Coordinator.Complete", &completeArgs, &completeReply)
 		time.Sleep(time.Second)
 	}
