@@ -35,9 +35,6 @@ func Worker(mapf func(string, string) []KeyValue,
 		ok := call("Coordinator.Assign", &assignArgs, &assignReply)
 
 		if ok {
-			fmt.Println("assignReply")
-			fmt.Println(assignReply)
-
 			switch assignReply.TaskType {
 			case MAP_TASK:
 				err := handleMapTask(assignArgs, assignReply, mapf)
@@ -53,8 +50,6 @@ func Worker(mapf func(string, string) []KeyValue,
 				break
 			case IDLE_TASK:
 				time.Sleep(time.Second)
-				fmt.Println("IDLE_FINISHED")
-
 				break
 			default:
 				break
@@ -133,9 +128,6 @@ func handleMapTask(assignArgs *AssignArgs, assignReply *AssignReply, mapf func(s
 
 func handleReduceTask(assignArgs *AssignArgs, assignReply *AssignReply, reducef func(string, []string) string) error {
 	kva := []KeyValue{}
-	fmt.Println("handle Reduce")
-	fmt.Println(assignReply)
-
 	for _, filename := range assignReply.Filenames {
 		file, err := os.Open(filename)
 		if err != nil {
@@ -189,8 +181,6 @@ func handleReduceTask(assignArgs *AssignArgs, assignReply *AssignReply, reducef 
 	for !ok {
 		completeArgs := CompleteArgs{TaskId: assignReply.TaskId, TaskType: assignReply.TaskType}
 		completeReply := CompleteReply{}
-		fmt.Println("completeArgs")
-		fmt.Println(completeArgs)
 		ok = call("Coordinator.Complete", &completeArgs, &completeReply)
 		time.Sleep(time.Second)
 	}

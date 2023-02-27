@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/rpc"
 	"os"
-	"strings"
 	"sync"
 	"time"
 )
@@ -113,15 +112,11 @@ func (c *Coordinator) GetTaskType() TASK_TYPE {
 func (c *Coordinator) AssignMap(args *AssignArgs, reply *AssignReply) error {
 	for _, task := range c.MapTasks.Tasks {
 		task.State.mu.Lock()
-		fmt.Println("task")
-		fmt.Println(task)
 		if task.State.State == IDLE {
 			reply.TaskId = task.Id
 			reply.Filename = task.Filename
 			reply.TaskType = MAP_TASK
 			reply.NReduce = c.NReduce
-			fmt.Println("reply")
-			fmt.Println(reply)
 			task.State.State = IN_PROGRESS
 			task.State.mu.Unlock()
 			return nil
@@ -134,18 +129,11 @@ func (c *Coordinator) AssignMap(args *AssignArgs, reply *AssignReply) error {
 func (c *Coordinator) AssignReduce(args *AssignArgs, reply *AssignReply) error {
 	for _, task := range c.ReduceTasks.Tasks {
 		task.State.mu.Lock()
-		fmt.Println("reduce task")
-		fmt.Println(task)
 		if task.State.State == IDLE {
 			reply.TaskId = task.Id
 			reply.Filenames = task.Filenames
 			reply.TaskType = REDUCE_TASK
 			reply.NReduce = c.NReduce
-			fmt.Println("reply")
-			fmt.Println(reply)
-			fmt.Println("reply filenames")
-			fmt.Println(strings.Join(reply.Filenames, "\n"))
-
 			task.State.State = IN_PROGRESS
 			task.State.mu.Unlock()
 			return nil
@@ -175,8 +163,6 @@ func (c *Coordinator) Assign(args *AssignArgs, reply *AssignReply) error {
 
 	if reply.Filename == "" && len(reply.Filenames) == 0 {
 		reply.TaskType = IDLE_TASK
-		fmt.Println("IDLE_TASK")
-		fmt.Println(reply)
 	}
 
 	return nil
@@ -184,8 +170,6 @@ func (c *Coordinator) Assign(args *AssignArgs, reply *AssignReply) error {
 
 func (c *Coordinator) Complete(args *CompleteArgs, reply *CompleteReply) error {
 	var err error
-	fmt.Println("Complete")
-	fmt.Println(args)
 	if args.TaskType == MAP_TASK {
 		err = c.HandleMapComplete(args, reply)
 	} else if args.TaskType == REDUCE_TASK {
@@ -238,7 +222,6 @@ func (c *Coordinator) Init(files []string) error {
 }
 
 func (c *Coordinator) InitReduceTasks() {
-	// todo: debug here
 	for i := 0; i < c.NReduce; i++ {
 		task := c.ReduceTasks.Tasks[i]
 		for _, mapTask := range c.MapTasks.Tasks {
@@ -247,14 +230,6 @@ func (c *Coordinator) InitReduceTasks() {
 			task.State.SetState(IDLE)
 		}
 	}
-	fmt.Println("InitReduceTasks")
-	str := ""
-	for _, task := range c.ReduceTasks.Tasks {
-		str += fmt.Sprintf("%v\n", task)
-	}
-
-	fmt.Println(str)
-
 }
 
 // start a thread that listens for RPCs from worker.go
