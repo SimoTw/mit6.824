@@ -18,6 +18,7 @@ const (
 	IDLE        STATE = 0
 	IN_PROGRESS STATE = 1
 	COMPLETED   STATE = 2
+	UNREADY     STATE = 3
 )
 
 type TASK_TYPE int
@@ -227,6 +228,10 @@ func (c *Coordinator) Init(files []string) error {
 		task := &Task{Id: i, Filename: filename, State: &SafeState{}, Timer: &SafeCounter{}}
 		c.MapTasks.Tasks = append(c.MapTasks.Tasks, task)
 	}
+	for i := 0; i < c.NReduce; i++ {
+		task := &Task{Id: i, Filenames: []string{}, State: &SafeState{State: UNREADY}, Timer: &SafeCounter{}} // race
+		c.ReduceTasks.Tasks = append(c.ReduceTasks.Tasks, task)
+	}
 	c.MapTasks.RemainCount = &SafeCounter{count: len(files)}
 	c.ReduceTasks.RemainCount = &SafeCounter{count: c.NReduce}
 	return nil
@@ -235,13 +240,12 @@ func (c *Coordinator) Init(files []string) error {
 func (c *Coordinator) InitReduceTasks() {
 	// todo: debug here
 	for i := 0; i < c.NReduce; i++ {
-		task := &Task{Id: i, Filenames: []string{}, State: &SafeState{}, Timer: &SafeCounter{}}
+		task := c.ReduceTasks.Tasks[i]
 		for _, mapTask := range c.MapTasks.Tasks {
 			filename := fmt.Sprintf("mr-%v-%v", mapTask.Id, i)
 			task.Filenames = append(task.Filenames, filename)
+			task.State.SetState(IDLE)
 		}
-		// note: may have a locality issue here
-		c.ReduceTasks.Tasks = append(c.ReduceTasks.Tasks, task)
 	}
 	fmt.Println("InitReduceTasks")
 	str := ""
@@ -286,7 +290,7 @@ func (c *Coordinator) HandleTimeoutTasks() {
 		}
 		for _, task := range tasks {
 			task.Timer.Inc() // race
-			if task.Timer.Value() >= TIMER_LIMIT && task.State.GetState() != COMPLETED {
+			if task.Timer.Value() >= TIMER_LIMIT && task.State.GetState() != COMPLETED && task.State.GetState() != UNREADY {
 				task.State.SetState(IDLE)
 			}
 		}
