@@ -35,18 +35,12 @@ type SafeState struct {
 	mu    sync.Mutex
 }
 
-// todo: migrate timer to a worker record
-type WorkerRecond struct {
-	Timer    int // discussion: could timer have a race?
-	WorkerId int
-}
-
 type Task struct {
 	Id              int
 	Filename        string
 	Filenames       []string
-	State           *SafeState // add a lock
-	Timer           int        // todo: add a lock here
+	State           *SafeState   // add a lock
+	Timer           *SafeCounter // todo: add a lock here
 	OutputFilenames []string
 	OutputFilename  string
 }
@@ -83,6 +77,12 @@ func (c *SafeCounter) Value() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.count
+}
+
+func (c *SafeCounter) Inc() {
+	c.mu.Lock()
+	c.count += 1
+	c.mu.Unlock()
 }
 
 func (s *SafeState) GetState() STATE {
@@ -235,7 +235,7 @@ func (c *Coordinator) Init(files []string) error {
 func (c *Coordinator) InitReduceTasks() {
 	// todo: debug here
 	for i := 0; i < c.NReduce; i++ {
-		task := &Task{Id: i, Filenames: []string{}, State: &SafeState{}, Timer: 0}
+		task := &Task{Id: i, Filenames: []string{}, State: &SafeState{}, Timer: &SafeCounter{}}
 		for _, mapTask := range c.MapTasks.Tasks {
 			filename := fmt.Sprintf("mr-%v-%v", mapTask.Id, i)
 			task.Filenames = append(task.Filenames, filename)
@@ -285,8 +285,8 @@ func (c *Coordinator) HandleTimeoutTasks() {
 			tasks = c.ReduceTasks.Tasks
 		}
 		for _, task := range tasks {
-			task.Timer += 1
-			if task.Timer >= TIMER_LIMIT && task.State.GetState() != COMPLETED {
+			task.Timer.Inc() // race
+			if task.Timer.Value() >= TIMER_LIMIT && task.State.GetState() != COMPLETED {
 				task.State.SetState(IDLE)
 			}
 		}
@@ -302,6 +302,6 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := Coordinator{NReduce: nReduce, MapTasks: mapTasks, ReduceTasks: reduceTasks}
 	c.Init(files)
 	c.server()
-	// go c.HandleTimeoutTasks()
+	go c.HandleTimeoutTasks()
 	return &c
 }
