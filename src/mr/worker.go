@@ -141,7 +141,6 @@ func handleReduceTask(assignArgs *AssignArgs, assignReply *AssignReply, reducef 
 		if err != nil {
 			continue
 		}
-		defer file.Close()
 		dec := json.NewDecoder(file)
 		for {
 			var kv KeyValue
@@ -149,6 +148,10 @@ func handleReduceTask(assignArgs *AssignArgs, assignReply *AssignReply, reducef 
 				break
 			}
 			kva = append(kva, kv)
+		}
+		err = file.Close()
+		if err != nil {
+			log.Fatal(err)
 		}
 	}
 	sort.Slice(kva, func(i, j int) bool {
@@ -178,6 +181,10 @@ func handleReduceTask(assignArgs *AssignArgs, assignReply *AssignReply, reducef 
 
 	oname := fmt.Sprintf("mr-%v", assignReply.TaskId)
 	os.Rename(fmt.Sprintf("./%v", ofile.Name()), fmt.Sprintf("./%v", oname))
+	err = ofile.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
 	ok := false
 	for !ok {
 		completeArgs := CompleteArgs{TaskId: assignReply.TaskId, TaskType: assignReply.TaskType}
