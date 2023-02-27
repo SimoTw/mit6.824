@@ -171,7 +171,7 @@ func handleReduceTask(assignArgs *AssignArgs, assignReply *AssignReply, reducef 
 		i = j
 	}
 
-	oname := fmt.Sprintf("mr-%v", assignReply.TaskId)
+	oname := fmt.Sprintf("mr-out-%v", assignReply.TaskId)
 	os.Rename(fmt.Sprintf("./%v", ofile.Name()), fmt.Sprintf("./%v", oname))
 	err = ofile.Close()
 	if err != nil {
