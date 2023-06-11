@@ -20,7 +20,6 @@ package raft
 import (
 	//	"bytes"
 
-	"fmt"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -191,7 +190,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		reply.VoteGranted = false
 	}
 	reply.Term = rf.currentTerm
-	fmt.Printf("[RequestVote] - args.Term: %v, rf.currentTerm: %v, rf.votedFor: %v, rf.me: %v, args.CandidateId: %v, reply.VoteGranted: %v\n", args.Term, rf.currentTerm, rf.votedFor, rf.me, args.CandidateId, reply.VoteGranted)
+	// DPrintf("[RequestVote] - args.Term: %v, rf.currentTerm: %v, rf.votedFor: %v, rf.me: %v, args.CandidateId: %v, reply.VoteGranted: %v\n", args.Term, rf.currentTerm, rf.votedFor, rf.me, args.CandidateId, reply.VoteGranted)
 }
 
 // example code to send a RequestVote RPC to a server.
@@ -272,9 +271,11 @@ func (rf *Raft) killed() bool {
 func (rf *Raft) ticker() {
 	for rf.killed() == false {
 		rf.AttemptToRunElection()
-		rf.AttemptToSendLeaderHeartbeat()
-		rf.AttemptToRunFollowerChecks()
-
+		_, isLeader := rf.GetState()
+		if isLeader {
+			rf.logger()
+		}
+		rf.HeartbeatTimer()
 		// Your code here to check if a leader election should
 		// be started and to randomize sleeping time using
 		// time.Sleep().
@@ -285,27 +286,26 @@ func (rf *Raft) AttemptToRunElection() {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	if !rf.receivedHeartbeat {
+		rf.setCandidateState()
 		voteCount := 1
 		voteForMeCount := 1
 		cond := sync.NewCond(&rf.mu)
-		rf.setCandidateState()
+		term := rf.currentTerm
 		rf.mu.Unlock()
 		for i := range rf.peers {
 			if i == rf.me {
 				continue
 			}
 			go func(x int) {
-				rf.mu.Lock()
-				args := &RequestVoteArgs{Term: rf.currentTerm, CandidateId: rf.me}
+				args := &RequestVoteArgs{Term: term, CandidateId: rf.me}
 				reply := &RequestVoteReply{}
-				rf.mu.Unlock()
 				rf.sendRequestVote(x, args, reply)
 				rf.mu.Lock()
 				if reply.VoteGranted {
 					voteForMeCount++
 				}
 				voteCount++
-				if reply.Term > rf.currentTerm {
+				if reply.Term > term {
 					rf.setFollowerState(reply.Term)
 				}
 				cond.Broadcast()
@@ -328,43 +328,11 @@ func (rf *Raft) AttemptToRunElection() {
 	}
 }
 
-func (rf *Raft) AttemptToSendLeaderHeartbeat() {
+func (rf *Raft) HeartbeatTimer() {
 	rf.mu.Lock()
-	defer rf.mu.Unlock()
-	for rf.state == LEADER {
-		rf.mu.Unlock()
-		for i := range rf.peers {
-			if i == rf.me {
-				continue
-			}
-			go func(x int) {
-				rf.mu.Lock()
-				args := &AppendEntriesArgs{Term: rf.currentTerm, LeaderId: rf.me}
-				reply := &AppendEntriesReply{}
-				rf.mu.Unlock()
-				rf.SendAppendEntries(x, args, reply)
-				rf.mu.Lock()
-				if reply.Term > rf.currentTerm {
-					fmt.Printf("[AttemptToSendLeaderHeartbeat] - reply: %v, rf.currentTerm: %v\n", reply, rf.currentTerm)
-					rf.setFollowerState(reply.Term)
-				}
-				rf.mu.Unlock()
-			}(i)
-		}
-		time.Sleep(HEART_BEAT_TIMEER_BASE)
-		rf.mu.Lock()
-	}
-}
-
-func (rf *Raft) AttemptToRunFollowerChecks() {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
-	if rf.state == FOLLOWER {
-		rf.receivedHeartbeat = false
-		rf.mu.Unlock()
-		time.Sleep(generateRandTime(ELECTION_TIMEER_BASE, ELECTION_TIMEER_OFFSET))
-		rf.mu.Lock()
-	}
+	rf.receivedHeartbeat = false
+	rf.mu.Unlock()
+	time.Sleep(generateRandTime(ELECTION_TIMEER_BASE, ELECTION_TIMEER_OFFSET))
 }
 
 func (rf *Raft) setFollowerState(term int) {
@@ -396,6 +364,34 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 func (rf *Raft) SendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 	return ok
+}
+
+func (rf *Raft) logger() {
+	for {
+		rf.mu.Lock()
+		if rf.state == LEADER {
+			rf.mu.Unlock()
+			return
+		}
+		term := rf.currentTerm
+		rf.mu.Unlock()
+		for i := range rf.peers {
+			if i == rf.me {
+				continue
+			}
+			go func(x int) {
+				args := &AppendEntriesArgs{Term: term, LeaderId: rf.me}
+				reply := &AppendEntriesReply{}
+				rf.SendAppendEntries(x, args, reply)
+				rf.mu.Lock()
+				if reply.Term > term {
+					rf.setFollowerState(reply.Term)
+				}
+				rf.mu.Unlock()
+			}(i)
+		}
+		time.Sleep(HEART_BEAT_TIMEER_BASE)
+	}
 }
 
 // the service or tester wants to create a Raft server. the ports
