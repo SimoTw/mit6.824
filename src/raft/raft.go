@@ -285,16 +285,13 @@ func (rf *Raft) ticker() {
 func (rf *Raft) AttemptToRunElection() {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	for !rf.receivedHeartbeat || rf.state == CANDIDATE {
-		// todo: election timeout
+	if !rf.receivedHeartbeat {
 		rf.setCandidateState()
 		voteCount := 1
 		voteForMeCount := 1
 		cond := sync.NewCond(&rf.mu)
 		term := rf.currentTerm
 		rf.mu.Unlock()
-		timer := time.NewTimer(generateRandTime(ELECTION_TIMEER_BASE, ELECTION_TIMEER_OFFSET))
-		isTimeout := false
 		for i := range rf.peers {
 			if i == rf.me {
 				continue
@@ -315,13 +312,6 @@ func (rf *Raft) AttemptToRunElection() {
 				rf.mu.Unlock()
 			}(i)
 		}
-		go func(timer *time.Timer) {
-			<-timer.C
-			rf.mu.Lock()
-			isTimeout = true
-			cond.Broadcast()
-			rf.mu.Unlock()
-		}(timer)
 		rf.mu.Lock()
 		for voteForMeCount < len(rf.peers)/2+1 && voteCount < len(rf.peers) {
 			cond.Wait()
@@ -365,18 +355,10 @@ func generateRandTime(base, offset int) time.Duration {
 
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	rf.mu.Lock()
-	defer rf.mu.Unlock()
-	if args.Term < rf.currentTerm {
-		reply.Success = false
-		reply.Term = rf.currentTerm
-		return
-	}
-	if rf.state == CANDIDATE && args.Term >= rf.currentTerm {
-		rf.setFollowerState(args.Term)
-	}
-	reply.Term = rf.currentTerm
 	rf.receivedHeartbeat = true
+	reply.Term = rf.currentTerm
 	reply.Success = true
+	rf.mu.Unlock()
 }
 
 func (rf *Raft) SendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
