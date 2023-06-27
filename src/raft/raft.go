@@ -79,6 +79,17 @@ type Raft struct {
 	votedFor          int
 	state             State
 	receivedHeartbeat bool
+
+	log         []*Entry
+	commitIndex int
+	lastApplied int
+	nextIndex   []int
+	matchIndex  []int
+}
+
+type Entry struct {
+	cmd  interface{}
+	term int
 }
 
 // return currentTerm and whether this server
@@ -162,8 +173,12 @@ type RequestVoteReply struct {
 }
 
 type AppendEntriesArgs struct {
-	Term     int
-	LeaderId int
+	Term         int
+	LeaderId     int
+	prevLogIndex int
+	prevLogTerm  int
+	entries      []*Entry
+	leaderCommit int
 }
 
 type AppendEntriesReply struct {
@@ -238,10 +253,17 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 // term. the third return value is true if this server believes it is
 // the leader.
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
-	index := -1
-	term := -1
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	index := len(rf.log)
+	term := rf.currentTerm
 	isLeader := rf.state == LEADER
-
+	if !isLeader {
+		return index, term, isLeader
+	}
+	entry := &Entry{cmd: command, term: rf.currentTerm}
+	rf.log = append(rf.log, entry)
+	index = len(rf.log)
 	// Your code here (2B).
 
 	return index, term, isLeader
@@ -379,13 +401,16 @@ func (rf *Raft) logger() {
 			if i == rf.me {
 				continue
 			}
-			go func(x int) {
+			go func(server int) {
 				args := &AppendEntriesArgs{Term: term, LeaderId: rf.me}
 				reply := &AppendEntriesReply{}
-				rf.SendAppendEntries(x, args, reply)
+				rf.SendAppendEntries(server, args, reply)
 				rf.mu.Lock()
 				if reply.Term > term {
 					rf.setFollowerState(reply.Term)
+				}
+				if reply.Success {
+					rf.nextIndex[server] = args.prevLogIndex + len(args.entries)
 				}
 				rf.mu.Unlock()
 			}(i)
