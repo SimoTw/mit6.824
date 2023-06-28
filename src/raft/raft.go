@@ -20,6 +20,7 @@ package raft
 import (
 	//	"bytes"
 
+	"math"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -175,10 +176,10 @@ type RequestVoteReply struct {
 type AppendEntriesArgs struct {
 	Term         int
 	LeaderId     int
-	prevLogIndex int
-	prevLogTerm  int
-	entries      []*Entry
-	leaderCommit int
+	PrevLogIndex int
+	PrevLogTerm  int
+	Entries      []*Entry
+	LeaderCommit int
 }
 
 type AppendEntriesReply struct {
@@ -377,10 +378,25 @@ func generateRandTime(base, offset int) time.Duration {
 
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	rf.receivedHeartbeat = true
 	reply.Term = rf.currentTerm
 	reply.Success = true
-	rf.mu.Unlock()
+	if args.Term < rf.currentTerm {
+		reply.Success = false
+		return
+	}
+	if args.PrevLogIndex >= len(rf.log) || rf.log[args.PrevLogIndex].term != args.PrevLogTerm {
+		reply.Success = false
+		return
+	}
+	if len(rf.log) > args.PrevLogIndex+1 {
+		rf.log = rf.log[:args.PrevLogIndex+1]
+	}
+	rf.log = append(rf.log, args.Entries...)
+	if args.LeaderCommit > rf.commitIndex {
+		rf.commitIndex = int(math.Min(float64(args.LeaderCommit), float64(len(rf.log)-1)))
+	}
 }
 
 func (rf *Raft) SendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
@@ -406,15 +422,27 @@ func (rf *Raft) logger() {
 				reply := &AppendEntriesReply{}
 				rf.SendAppendEntries(server, args, reply)
 				rf.mu.Lock()
-				if reply.Term > term {
-					rf.setFollowerState(reply.Term)
-				}
-				if reply.Success {
-					rf.nextIndex[server] = args.prevLogIndex + len(args.entries)
+				if !reply.Success {
+					if reply.Term > term {
+						rf.setFollowerState(reply.Term)
+					}
+				} else {
+					updatedIndex := args.PrevLogIndex + len(args.Entries)
+					rf.nextIndex[server] = updatedIndex
+					// updatedCount := 0
+					// if updatedIndex > rf.commitIndex {
+					// }
+
+					// update nextIndex
+					// more than half entries, update commit
+					// update applied(for leader and follower)
 				}
 				rf.mu.Unlock()
 			}(i)
 		}
+		// if rf.commitIndex > rf.lastApplied {
+
+		// }
 		time.Sleep(HEART_BEAT_TIMEER_BASE)
 	}
 }
