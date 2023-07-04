@@ -265,8 +265,6 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	entry := &Entry{cmd: command, term: rf.currentTerm}
 	rf.log = append(rf.log, entry)
 	index = len(rf.log)
-	// Your code here (2B).
-
 	return index, term, isLeader
 }
 
@@ -343,7 +341,7 @@ func (rf *Raft) AttemptToRunElection() {
 			return
 		}
 		if voteForMeCount > len(rf.peers)/2 {
-			rf.state = LEADER
+			rf.setLeaderState()
 
 		} else {
 			rf.setFollowerState(rf.currentTerm)
@@ -370,6 +368,14 @@ func (rf *Raft) setCandidateState() {
 	rf.votedFor = rf.me
 }
 
+func (rf *Raft) setLeaderState() {
+	rf.state = LEADER
+	for i := range rf.peers {
+		rf.nextIndex[i] = len(rf.log)
+		rf.matchIndex[i] = 0
+	}
+}
+
 func generateRandTime(base, offset int) time.Duration {
 	rand.Seed(time.Now().UnixNano())
 	randInt := base + rand.Intn(offset)
@@ -382,6 +388,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.receivedHeartbeat = true
 	reply.Term = rf.currentTerm
 	reply.Success = true
+	// log inconsistency
 	if args.Term < rf.currentTerm {
 		reply.Success = false
 		return
