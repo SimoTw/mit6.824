@@ -176,10 +176,10 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	if args.Term > rf.currentTerm {
+	if args.Term > rf.currentTerm && rf.state == CANDIDATE {
 		rf.setFollowerState(args.Term)
 	}
-	if args.Term > rf.currentTerm {
+	if args.Term > rf.currentTerm && rf.votedFor == -1 {
 		rf.votedFor = args.CandidateId
 		reply.VoteGranted = true
 	} else if args.Term == rf.currentTerm && rf.votedFor == -1 {
