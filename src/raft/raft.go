@@ -20,6 +20,7 @@ package raft
 import (
 	//	"bytes"
 
+	"math"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -79,6 +80,17 @@ type Raft struct {
 	votedFor          int
 	state             State
 	receivedHeartbeat bool
+
+	log         []*Entry
+	commitIndex int
+	lastApplied int
+	nextIndex   []int
+	matchIndex  []int
+}
+
+type Entry struct {
+	Cmd  interface{}
+	Term int
 }
 
 // return currentTerm and whether this server
@@ -162,8 +174,12 @@ type RequestVoteReply struct {
 }
 
 type AppendEntriesArgs struct {
-	Term     int
-	LeaderId int
+	Term         int
+	LeaderId     int
+	PrevLogIndex int
+	PrevLogTerm  int
+	Entries      []*Entry
+	LeaderCommit int
 }
 
 type AppendEntriesReply struct {
@@ -238,13 +254,77 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 // term. the third return value is true if this server believes it is
 // the leader.
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
-	index := -1
-	term := -1
+	index := len(rf.log)
+	term := rf.currentTerm
 	isLeader := rf.state == LEADER
+	if isLeader {
+		entry := &Entry{Cmd: command, Term: rf.currentTerm}
+		rf.log = append(rf.log, entry)
+		index = len(rf.log)
+		for i := range rf.peers {
+			if i == rf.me {
+				continue
+			}
+			go rf.SyncLog(i)
+		}
+	}
 
 	// Your code here (2B).
 
 	return index, term, isLeader
+}
+
+func (rf *Raft) SyncLog(server int) {
+	success := false
+	for !success {
+		rf.mu.Lock()
+		if rf.state != LEADER {
+			rf.mu.Unlock()
+			return
+		}
+		if rf.nextIndex[server] == len(rf.log) {
+			rf.mu.Unlock()
+			return
+		}
+		args := &AppendEntriesArgs{Term: rf.currentTerm, LeaderId: rf.me, PrevLogIndex: -1, PrevLogTerm: -1}
+		prevLogIndex := rf.nextIndex[server] - 1
+		if prevLogIndex >= 0 {
+			args.PrevLogTerm = prevLogIndex
+		}
+		entries := rf.log[rf.nextIndex[server]:]
+		args.Entries = entries
+		args.LeaderCommit = rf.commitIndex
+		reply := &AppendEntriesReply{}
+		rf.mu.Unlock()
+		rf.SendAppendEntries(server, args, reply)
+		rf.mu.Lock()
+		if !reply.Success {
+			if reply.Term > rf.currentTerm {
+				rf.setFollowerState(reply.Term)
+			} else {
+				rf.nextIndex[server]--
+			}
+		} else {
+			updatedNextIndex := args.PrevLogIndex + len(args.Entries)
+			updatedCommitIndex := int(math.Min(float64(updatedNextIndex), float64(rf.commitIndex)))
+			rf.nextIndex[server] = updatedNextIndex
+			rf.matchIndex[server] = updatedCommitIndex
+			rf.updateCommitIndex(updatedNextIndex)
+		}
+		rf.mu.Unlock()
+	}
+}
+
+func (rf *Raft) updateCommitIndex(updatedNextIndex int) {
+	count := 0
+	for i := range rf.peers {
+		if rf.nextIndex[i] >= updatedNextIndex {
+			count++
+		}
+	}
+	if count > len(rf.peers)/2 && updatedNextIndex > rf.commitIndex {
+		rf.commitIndex = updatedNextIndex
+	}
 }
 
 // the tester doesn't halt goroutines created by Raft after each test,
@@ -320,7 +400,7 @@ func (rf *Raft) AttemptToRunElection() {
 			return
 		}
 		if voteForMeCount > len(rf.peers)/2 {
-			rf.state = LEADER
+			rf.setLeaderState()
 
 		} else {
 			rf.setFollowerState(rf.currentTerm)
@@ -341,6 +421,15 @@ func (rf *Raft) setFollowerState(term int) {
 	rf.votedFor = -1
 }
 
+func (rf *Raft) setLeaderState() {
+	rf.state = LEADER
+	rf.nextIndex = make([]int, len(rf.peers))
+	rf.matchIndex = make([]int, len(rf.peers))
+	for i := range rf.peers {
+		rf.nextIndex[i] = len(rf.log)
+	}
+}
+
 func (rf *Raft) setCandidateState() {
 	rf.state = CANDIDATE
 	rf.currentTerm += 1
@@ -354,11 +443,27 @@ func generateRandTime(base, offset int) time.Duration {
 }
 
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
+	// todo: fix append entries
 	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	rf.receivedHeartbeat = true
 	reply.Term = rf.currentTerm
 	reply.Success = true
-	rf.mu.Unlock()
+	if len(args.Entries) != 0 {
+		if args.Term < rf.currentTerm {
+			reply.Success = false
+			return
+		}
+		if args.PrevLogIndex >= len(rf.log) || rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
+			reply.Success = false
+			return
+		}
+		rf.log = append(rf.log[:args.PrevLogIndex+1], args.Entries...)
+		if args.LeaderCommit > rf.commitIndex {
+			rf.commitIndex = int(math.Min(float64(args.LeaderCommit), float64(len(rf.log)-1)))
+		}
+	}
+
 }
 
 func (rf *Raft) SendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
